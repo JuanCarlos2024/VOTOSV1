@@ -214,8 +214,8 @@ export default function PreguntasScreen() {
 
   function colorEstado(estado: string) {
     if (estado === 'activa') return '#16A34A';
-    if (estado === 'cerrada') return '#6B7280';
-    return '#D97706';
+    if (estado === 'cerrada') return '#374151';
+    return '#EA580C';
   }
 
   function renderPregunta({ item }: { item: Pregunta }) {
@@ -260,7 +260,7 @@ export default function PreguntasScreen() {
                 onPress={() => eliminar(item)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.btnTexto}>🗑</Text>
+                <Text style={styles.btnTexto}>🗑 Eliminar</Text>
               </TouchableOpacity>
             </>
           )}
@@ -304,7 +304,7 @@ export default function PreguntasScreen() {
                 onPress={() => eliminar(item)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.btnTexto}>🗑</Text>
+                <Text style={styles.btnTexto}>🗑 Eliminar</Text>
               </TouchableOpacity>
             </>
           )}
@@ -454,12 +454,15 @@ const styles = StyleSheet.create({
   },
   botonCrearTexto: { color: C.blanco, fontWeight: '800', fontSize: 16, letterSpacing: 1 },
   tarjeta: {
-    backgroundColor: C.tarjeta,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: C.borde,
+    backgroundColor: C.blanco,
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
   badges: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   estadoBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },

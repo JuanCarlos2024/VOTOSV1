@@ -798,8 +798,13 @@ const styles = StyleSheet.create({
   yaVotoCard: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     borderRadius: 20, padding: 32, borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  yaVotoIcono: { fontSize: 80, marginBottom: 16 },
+  yaVotoIcono: { fontSize: 110, marginBottom: 16 },
   yaVotoTitulo: { fontSize: 22, fontWeight: '900', letterSpacing: 1, marginBottom: 6, textAlign: 'center' },
   yaVotoSub: { fontSize: 16, color: C.txtSecundario, marginBottom: 24 },
   yaVotoBox: {
