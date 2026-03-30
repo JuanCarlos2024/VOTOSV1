@@ -35,6 +35,10 @@ export default function PreguntasScreen() {
   const [msgError, setMsgError] = useState('');
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [ejecutando, setEjecutando] = useState(false);
+  // Unanimidad — double confirmation
+  const [unanimidadPregunta, setUnanimidadPregunta] = useState<Pregunta | null>(null);
+  const [unanimidadPaso, setUnanimidadPaso] = useState<1 | 2>(1);
+  const [unanimidadEjecutando, setUnanimidadEjecutando] = useState(false);
 
   function confirmar(data: ConfirmData) {
     setMsgError('');
@@ -130,6 +134,63 @@ export default function PreguntasScreen() {
         cargar();
       },
     });
+  }
+
+  function abrirUnanimidad(pregunta: Pregunta) {
+    setMsgError('');
+    setUnanimidadPregunta(pregunta);
+    setUnanimidadPaso(1);
+  }
+
+  async function ejecutarUnanimidad() {
+    if (!unanimidadPregunta) return;
+    setUnanimidadEjecutando(true);
+    try {
+      // 1. Fetch all presidents and existing votes
+      const [{ data: presidentes }, { data: votosExistentes }] = await Promise.all([
+        supabase.from('usuarios').select('id, votos_disponibles').eq('rol', 'presidente'),
+        supabase.from('votos').select('usuario_id').eq('pregunta_id', unanimidadPregunta.id),
+      ]);
+
+      // 2. Insert Apruebo for presidents who haven't voted
+      const yaVotaron = new Set((votosExistentes ?? []).map((v: any) => v.usuario_id));
+      const nuevosVotos = (presidentes ?? [])
+        .filter((u: any) => !yaVotaron.has(u.id))
+        .map((u: any) => ({
+          pregunta_id: unanimidadPregunta.id,
+          usuario_id: u.id,
+          respuesta: 'Apruebo',
+          peso: u.votos_disponibles ?? 1,
+        }));
+
+      if (nuevosVotos.length > 0) {
+        const { error: errVotos } = await supabase.from('votos').insert(nuevosVotos);
+        if (errVotos) {
+          setMsgError(`Error al insertar votos: ${errVotos.message}`);
+          return;
+        }
+      }
+
+      // 3. Close question with unanimidad = true
+      const { error: errPreg } = await supabase
+        .from('preguntas')
+        .update({ estado: 'cerrada', unanimidad: true })
+        .eq('id', unanimidadPregunta.id);
+
+      if (errPreg) {
+        setMsgError(`Error al cerrar la votación: ${errPreg.message}`);
+        return;
+      }
+
+      // 4. Audit log
+      await registrar('UNANIMIDAD', 'admin',
+        `Aprobado por unanimidad — ${unanimidadPregunta.texto.slice(0, 80)}`);
+
+      setUnanimidadPregunta(null);
+      cargar();
+    } finally {
+      setUnanimidadEjecutando(false);
+    }
   }
 
   async function mostrarResumen(pregunta: Pregunta) {
@@ -280,6 +341,13 @@ export default function PreguntasScreen() {
               >
                 <Text style={styles.btnTexto}>👁 Seguimiento</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnUnanimidad]}
+                onPress={() => abrirUnanimidad(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnUnanimidadTexto}>✅ Aprobado por Unanimidad</Text>
+              </TouchableOpacity>
             </>
           )}
           {item.estado === 'cerrada' && (
@@ -389,6 +457,72 @@ export default function PreguntasScreen() {
         </View>
       </Modal>
 
+      {/* Modal Unanimidad — doble confirmación */}
+      <Modal visible={unanimidadPregunta !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { borderTopWidth: 5, borderTopColor: '#1B5E20' }]}>
+            <Text style={[styles.modalTitulo, { color: '#1B5E20' }]}>✅ Unanimidad</Text>
+
+            {unanimidadPaso === 1 ? (
+              <>
+                <Text style={styles.modalSubtitulo} numberOfLines={4}>
+                  ¿Confirmas que esta pregunta fue aprobada por unanimidad?{'\n\n'}
+                  "{unanimidadPregunta?.texto}"{'\n\n'}
+                  Esta acción cerrará la votación para todos.
+                </Text>
+                <View style={styles.modalBotones}>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: '#1B5E20' }]}
+                    onPress={() => setUnanimidadPaso(2)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalBtnTexto}>Sí, continuar →</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: C.tarjeta2, borderWidth: 1, borderColor: C.borde }]}
+                    onPress={() => setUnanimidadPregunta(null)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.modalBtnTexto, { color: C.txtPrimario }]}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.unanimidadAviso}>
+                  <Text style={styles.unanimidadAvisoIcono}>⚠️</Text>
+                  <Text style={styles.unanimidadAvisoTxt}>
+                    Esta acción no se puede deshacer.{'\n'}Se insertará un voto APRUEBO por cada asociación que no haya votado.
+                  </Text>
+                </View>
+                <Text style={styles.modalSubtitulo}>¿Confirmar definitivamente?</Text>
+                <View style={styles.modalBotones}>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: '#1B5E20' }, unanimidadEjecutando && { opacity: 0.6 }]}
+                    onPress={ejecutarUnanimidad}
+                    disabled={unanimidadEjecutando}
+                    activeOpacity={0.8}
+                  >
+                    {unanimidadEjecutando
+                      ? <ActivityIndicator color="#FFF" />
+                      : <Text style={styles.modalBtnTexto}>✅ Confirmar Unanimidad</Text>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, { backgroundColor: C.tarjeta2, borderWidth: 1, borderColor: C.borde }]}
+                    onPress={() => { setUnanimidadPregunta(null); }}
+                    disabled={unanimidadEjecutando}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.modalBtnTexto, { color: C.txtPrimario }]}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de resumen al cerrar */}
       <Modal visible={modalResumen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -473,6 +607,19 @@ const styles = StyleSheet.create({
   acciones: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   btn: { flex: 1, paddingVertical: 13, borderRadius: 8, alignItems: 'center', minHeight: 46, minWidth: 70 },
   btnTexto: { color: C.blanco, fontWeight: '700', fontSize: 13 },
+  btnUnanimidad: {
+    width: '100%', paddingVertical: 16, borderRadius: 10, alignItems: 'center',
+    backgroundColor: '#1B5E20', minHeight: 56, marginTop: 4,
+    shadowColor: '#1B5E20', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
+  btnUnanimidadTexto: { color: C.blanco, fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
+  unanimidadAviso: {
+    backgroundColor: '#FEF9C3', borderRadius: 10, padding: 14,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderColor: '#F9A825',
+  },
+  unanimidadAvisoIcono: { fontSize: 22 },
+  unanimidadAvisoTxt: { flex: 1, fontSize: 14, color: '#78350F', lineHeight: 20, fontWeight: '600' },
   msgError: {
     backgroundColor: '#FEF2F2', borderWidth: 1.5, borderColor: '#DC2626',
     borderRadius: 10, padding: 12, marginBottom: 12,

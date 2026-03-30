@@ -8,7 +8,8 @@ export type TipoAudit =
   | 'LIBERAR'
   | 'CERRAR'
   | 'RESET'
-  | 'TIMEOUT';
+  | 'TIMEOUT'
+  | 'UNANIMIDAD';
 
 export async function registrar(
   tipo: TipoAudit,

@@ -30,6 +30,7 @@ export type Pregunta = {
   estado: 'borrador' | 'activa' | 'cerrada';
   max_selecciones: number;
   created_at: string;
+  unanimidad?: boolean;
 };
 
 export type Candidato = {

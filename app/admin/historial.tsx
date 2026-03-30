@@ -53,15 +53,25 @@ export default function HistorialScreen() {
 
   function renderItem({ item }: { item: Pregunta }) {
     return (
-      <View style={styles.tarjeta}>
+      <View style={[styles.tarjeta, item.unanimidad && styles.tarjetaUnanimidad]}>
         <View style={styles.topRow}>
           <View style={[styles.tipoBadge, { backgroundColor: item.tipo === 'eleccion' ? '#6D28D9' : '#1E40AF' }]}>
             <Text style={styles.badgeTexto}>{item.tipo.toUpperCase()}</Text>
           </View>
+          {item.unanimidad && (
+            <View style={styles.unanimidadBadge}>
+              <Text style={styles.unanimidadBadgeTxt}>✅ UNANIMIDAD</Text>
+            </View>
+          )}
           <Text style={styles.fecha}>{formatFecha(item.created_at)}</Text>
         </View>
 
         <Text style={styles.preguntaTexto}>{item.texto}</Text>
+        {item.unanimidad && (
+          <Text style={styles.unanimidadNota}>
+            Esta votación fue aprobada por unanimidad por el administrador
+          </Text>
+        )}
 
         <View style={styles.acciones}>
           <TouchableOpacity
@@ -130,12 +140,24 @@ const styles = StyleSheet.create({
     letterSpacing: 1, marginBottom: 14,
   },
   tarjeta: {
-    backgroundColor: C.tarjeta, borderRadius: 12, padding: 16,
-    marginBottom: 12, borderWidth: 1, borderColor: C.borde, gap: 10,
+    backgroundColor: C.blanco, borderRadius: 14, padding: 16,
+    marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3, gap: 10,
   },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  tarjetaUnanimidad: {
+    borderLeftWidth: 4, borderLeftColor: '#F9A825',
+  },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   tipoBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   badgeTexto: { color: C.blanco, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  unanimidadBadge: {
+    backgroundColor: '#F9A825', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+  },
+  unanimidadBadgeTxt: { color: '#1A1A00', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  unanimidadNota: {
+    fontSize: 13, color: '#78350F', backgroundColor: '#FEF9C3',
+    borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#F9A825', lineHeight: 18,
+  },
   fecha: { fontSize: 12, color: C.txtTercero },
   preguntaTexto: { fontSize: 15, fontWeight: '700', color: C.txtPrimario, lineHeight: 21 },
   acciones: { flexDirection: 'row', gap: 8 },

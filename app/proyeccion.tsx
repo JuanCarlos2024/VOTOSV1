@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { supabase, Pregunta, Candidato } from '../lib/supabase';
@@ -41,6 +41,11 @@ export default function ProyeccionScreen() {
   const [totalVotaron, setTotalVotaron] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [ahora, setAhora] = useState(new Date());
+  // Unanimidad special screen
+  const [mostrarUnanimidad, setMostrarUnanimidad] = useState(false);
+  const [textoUnanimidad, setTextoUnanimidad] = useState('');
+  const preguntaActivaRef = useRef<(Pregunta & { unanimidad?: boolean }) | null>(null);
+  const unanimidadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reloj
   useEffect(() => {
@@ -71,6 +76,15 @@ export default function ProyeccionScreen() {
       .from('preguntas').select('*').eq('estado', 'activa').maybeSingle();
 
     if (!preg) {
+      // Detect if last active question was closed by unanimidad → show special screen
+      const ultima = preguntaActivaRef.current;
+      if (ultima?.unanimidad === true && !mostrarUnanimidad) {
+        setTextoUnanimidad(ultima.texto);
+        setMostrarUnanimidad(true);
+        if (unanimidadTimerRef.current) clearTimeout(unanimidadTimerRef.current);
+        unanimidadTimerRef.current = setTimeout(() => setMostrarUnanimidad(false), 10000);
+      }
+      preguntaActivaRef.current = null;
       setPregunta(null);
       setVotos([]);
       setCandidatos([]);
@@ -80,6 +94,7 @@ export default function ProyeccionScreen() {
       return;
     }
 
+    preguntaActivaRef.current = preg as Pregunta;
     setPregunta(preg as Pregunta);
 
     const { data: rawVotos } = await supabase
@@ -143,6 +158,18 @@ export default function ProyeccionScreen() {
   const totalPeso = votos.reduce((s, v) => s + v.peso, 0);
   const pctVotaron = totalPresidentes > 0 ? Math.round((totalVotaron / totalPresidentes) * 100) : 0;
   const horaStr = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+  // ── Pantalla especial de Unanimidad (10 segundos) ──────────
+  if (mostrarUnanimidad) {
+    return (
+      <View style={styles.unanimidadBg}>
+        <Text style={styles.unanimidadIcono}>✅</Text>
+        <Text style={styles.unanimidadTitulo}>APROBADO POR UNANIMIDAD</Text>
+        <Text style={styles.unanimidadTexto}>{textoUnanimidad}</Text>
+        <Text style={styles.unanimidadSub}>Federación del Rodeo Chileno</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -441,4 +468,22 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#4ADE80' },
   liveTxt: { color: '#4ADE80', fontSize: 14, fontWeight: '800', letterSpacing: 2 },
+
+  // Unanimidad fullscreen
+  unanimidadBg: {
+    flex: 1, backgroundColor: '#1B5E20',
+    alignItems: 'center', justifyContent: 'center', padding: 40,
+  },
+  unanimidadIcono: { fontSize: 120, marginBottom: 24 },
+  unanimidadTitulo: {
+    color: '#FFFFFF', fontSize: 48, fontWeight: '900',
+    textAlign: 'center', letterSpacing: 2, lineHeight: 58, marginBottom: 24,
+  },
+  unanimidadTexto: {
+    color: 'rgba(255,255,255,0.85)', fontSize: 28, fontWeight: '600',
+    textAlign: 'center', lineHeight: 38, marginBottom: 32,
+  },
+  unanimidadSub: {
+    color: 'rgba(255,255,255,0.5)', fontSize: 18, letterSpacing: 2, textAlign: 'center',
+  },
 });

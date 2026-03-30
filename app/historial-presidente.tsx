@@ -49,10 +49,10 @@ export default function HistorialPresidenteScreen() {
     // Get unique pregunta_ids
     const preguntaIds = [...new Set(votos.map((v: any) => v.pregunta_id))];
 
-    // Fetch all those preguntas
+    // Fetch all those preguntas (including unanimidad flag)
     const { data: preguntas } = await supabase
       .from('preguntas')
-      .select('id, texto, tipo, estado')
+      .select('id, texto, tipo, estado, unanimidad')
       .in('id', preguntaIds);
 
     // Collect candidato_ids from election votes to resolve names
@@ -90,6 +90,7 @@ export default function HistorialPresidenteScreen() {
           pregunta_texto: preg.texto,
           pregunta_tipo: preg.tipo,
           pregunta_estado: preg.estado,
+          pregunta_unanimidad: preg.unanimidad ?? false,
           fecha: v.created_at,
           respuestas: [],
           candidatosNombres: [],
@@ -131,7 +132,8 @@ export default function HistorialPresidenteScreen() {
     }) + ' · ' + d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function colorEstado(estado: string) {
+  function colorEstado(estado: string, unanimidad?: boolean) {
+    if (unanimidad) return '#F9A825';
     if (estado === 'activa') return '#16A34A';
     if (estado === 'cerrada') return '#374151';
     return '#D97706';
@@ -139,22 +141,29 @@ export default function HistorialPresidenteScreen() {
 
   function renderItem({ item }: { item: EntradaHistorial }) {
     const esReglamento = item.pregunta_tipo === 'reglamento';
+    const esUnanimidad = item.pregunta_unanimidad === true;
     const respuestaUnica = item.respuestas[0] ?? '';
     const colorResp = esReglamento ? (COLOR_REG[respuestaUnica] ?? C.txtSecundario) : C.azul;
-    const borderColorCard = esReglamento
-      ? (COLOR_REG[respuestaUnica] ?? C.borde)
-      : C.azul;
+    const borderColorCard = esUnanimidad ? '#F9A825'
+      : esReglamento ? (COLOR_REG[respuestaUnica] ?? C.borde) : C.azul;
 
     return (
-      <View style={[styles.tarjeta, { borderLeftColor: borderColorCard }]}>
+      <View style={[styles.tarjeta, { borderLeftColor: borderColorCard },
+        esUnanimidad && styles.tarjetaUnanimidad]}>
         {/* Badges + fecha */}
         <View style={styles.badgesRow}>
           <View style={[styles.badge, { backgroundColor: item.pregunta_tipo === 'eleccion' ? '#6D28D9' : '#1E40AF' }]}>
             <Text style={styles.badgeTxt}>{item.pregunta_tipo.toUpperCase()}</Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: colorEstado(item.pregunta_estado) }]}>
-            <Text style={styles.badgeTxt}>{item.pregunta_estado.toUpperCase()}</Text>
-          </View>
+          {esUnanimidad ? (
+            <View style={[styles.badge, { backgroundColor: '#F9A825' }]}>
+              <Text style={[styles.badgeTxt, { color: '#1A1A00' }]}>✅ UNANIMIDAD</Text>
+            </View>
+          ) : (
+            <View style={[styles.badge, { backgroundColor: colorEstado(item.pregunta_estado) }]}>
+              <Text style={styles.badgeTxt}>{item.pregunta_estado.toUpperCase()}</Text>
+            </View>
+          )}
           <Text style={styles.fecha}>{formatFecha(item.fecha)}</Text>
         </View>
 
@@ -163,7 +172,17 @@ export default function HistorialPresidenteScreen() {
 
         {/* Respuesta */}
         <View style={[styles.respuestaBox, { borderColor: borderColorCard }]}>
-          {esReglamento ? (
+          {esUnanimidad ? (
+            <>
+              <Text style={[styles.respuestaLabel, { color: '#78350F' }]}>RESULTADO</Text>
+              <Text style={[styles.respuestaValor, { color: '#1B5E20', fontSize: 20 }]}>
+                ✅ APROBADO POR UNANIMIDAD
+              </Text>
+              <Text style={styles.unanimidadNota}>
+                Esta votación fue aprobada por unanimidad por el administrador
+              </Text>
+            </>
+          ) : esReglamento ? (
             <>
               <Text style={styles.respuestaLabel}>TU VOTO</Text>
               <Text style={[styles.respuestaValor, { color: colorResp }]}>
@@ -312,6 +331,13 @@ const styles = StyleSheet.create({
   respuestaValor: { fontSize: 22, fontWeight: '900' },
   pesoTxt: { fontSize: 13, color: C.txtSecundario, marginTop: 4 },
 
+  tarjetaUnanimidad: {
+    backgroundColor: '#FFFDF0',
+  },
+  unanimidadNota: {
+    fontSize: 13, color: '#78350F', backgroundColor: '#FEF9C3',
+    borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#F9A825', lineHeight: 18,
+  },
   candidatoFila: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   candidatoDot: { color: '#16A34A', fontSize: 18, fontWeight: '900' },
   candidatoNombre: { fontSize: 18, fontWeight: '700', flex: 1 },

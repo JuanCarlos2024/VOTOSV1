@@ -33,18 +33,20 @@ const TIPOS_FILTRO: Array<{ label: string; value: string }> = [
   { label: 'VOTO', value: 'VOTO' },
   { label: 'LIBERAR', value: 'LIBERAR' },
   { label: 'CERRAR', value: 'CERRAR' },
+  { label: 'UNANIMIDAD', value: 'UNANIMIDAD' },
   { label: 'RESET', value: 'RESET' },
   { label: 'TIMEOUT', value: 'TIMEOUT' },
 ];
 
 const COLOR_TIPO: Record<string, string> = {
-  LOGIN:   '#16A34A',
-  LOGOUT:  '#6B7280',
-  VOTO:    '#1E40AF',
-  LIBERAR: '#15803D',
-  CERRAR:  '#374151',
-  RESET:   '#C8102E',
-  TIMEOUT: '#D97706',
+  LOGIN:      '#16A34A',
+  LOGOUT:     '#6B7280',
+  VOTO:       '#1E40AF',
+  LIBERAR:    '#15803D',
+  CERRAR:     '#374151',
+  UNANIMIDAD: '#F9A825',
+  RESET:      '#C8102E',
+  TIMEOUT:    '#D97706',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

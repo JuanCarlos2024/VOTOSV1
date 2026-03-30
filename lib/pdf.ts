@@ -12,6 +12,7 @@ export type EntradaHistorial = {
   pregunta_texto: string;
   pregunta_tipo: 'reglamento' | 'eleccion';
   pregunta_estado: string;
+  pregunta_unanimidad?: boolean;
   fecha: string;
   respuestas: string[];
   candidatosNombres: string[];
