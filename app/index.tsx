@@ -48,6 +48,14 @@ export default function LoginScreen() {
         return;
       }
 
+      if (usuario.activo === false) {
+        Alert.alert(
+          'Cuenta desactivada',
+          'Tu cuenta ha sido desactivada.\nContacta al administrador.'
+        );
+        return;
+      }
+
       await guardarUsuario(usuario);
       await registrar('LOGIN', usuario.nombre_usuario, `Inicio de sesión — ${usuario.rol}`, {
         usuario_id: usuario.id,

@@ -21,6 +21,7 @@ export type Usuario = {
   contrasena: string;
   votos_disponibles: number;
   rol: 'administrador' | 'presidente';
+  activo?: boolean;
 };
 
 export type Pregunta = {

@@ -11,7 +11,11 @@ export type TipoAudit =
   | 'RESET'
   | 'TIMEOUT'
   | 'UNANIMIDAD'
-  | 'EDITAR';
+  | 'EDITAR'
+  | 'CREAR_USUARIO'
+  | 'EDITAR_USUARIO'
+  | 'DESACTIVAR_USUARIO'
+  | 'ACTIVAR_USUARIO';
 
 export type AuditoriaExtra = {
   usuario_id?: string;
