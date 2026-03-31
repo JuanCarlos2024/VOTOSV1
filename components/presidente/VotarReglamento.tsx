@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   },
   preguntaCard: {
     backgroundColor: C.tarjeta, borderRadius: SIZES.radiusMd,
-    padding: 20, marginBottom: 20, borderWidth: 2, borderColor: C.azul,
+    padding: 20, marginBottom: 24, borderWidth: 2, borderColor: C.azul,
   },
   tipoBadge: {
     backgroundColor: C.rojo, paddingHorizontal: 12, paddingVertical: 5,
@@ -75,21 +75,21 @@ const styles = StyleSheet.create({
   },
   tipoBadgeTxt: { color: C.blanco, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   preguntaTxt: {
-    fontSize: 26, fontWeight: '700', color: C.txtPrimario, lineHeight: 34,
+    fontSize: 20, fontWeight: '900', color: C.txtPrimario, lineHeight: 28,
   },
   instruccion: {
     color: C.azul, fontSize: SIZES.txtBadge, fontWeight: '800',
-    letterSpacing: 2, marginBottom: 14,
+    letterSpacing: 2, marginBottom: 18,
   },
   opcionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     borderWidth: 2.5, borderRadius: 18,
-    paddingVertical: 22, paddingHorizontal: 24,
-    marginBottom: 14, minHeight: SIZES.touchMin,
+    paddingVertical: 18, paddingHorizontal: 24,
+    marginBottom: 16, minHeight: SIZES.touchMin,
     ...SHADOWS.card,
   },
-  opcionIcono: { fontSize: 36 },
-  opcionTxt: { fontSize: 28, fontWeight: '900', letterSpacing: 1 },
+  opcionIcono: { fontSize: 26 },
+  opcionTxt: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   btnHistorial: {
     backgroundColor: C.azul, borderRadius: SIZES.radiusMd,
     paddingVertical: 18, alignItems: 'center',

@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { exportarResultadosPDF } from '../../lib/pdf';
+import { exportarResultadosPDF, exportarResumenGeneralPDF } from '../../lib/pdf';
 import { supabase } from '../../lib/supabase';
 import type { Pregunta } from '../../lib/supabase';
 import { C } from '../../lib/theme';
@@ -13,6 +13,7 @@ export default function HistorialScreen() {
   const [preguntas, setPreguntas] = useState<Pregunta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [exportando, setExportando] = useState<string | null>(null);
+  const [exportandoResumen, setExportandoResumen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -37,6 +38,15 @@ export default function HistorialScreen() {
       await exportarResultadosPDF(pregunta);
     } finally {
       setExportando(null);
+    }
+  }
+
+  async function exportarResumen() {
+    setExportandoResumen(true);
+    try {
+      await exportarResumenGeneralPDF();
+    } finally {
+      setExportandoResumen(false);
     }
   }
 
@@ -117,9 +127,24 @@ export default function HistorialScreen() {
       }
       contentContainerStyle={{ paddingBottom: 40, paddingTop: 16 }}
       ListHeaderComponent={
-        <Text style={styles.titulo}>
-          {preguntas.length} votación{preguntas.length !== 1 ? 'es' : ''} cerrada{preguntas.length !== 1 ? 's' : ''}
-        </Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.titulo}>
+            {preguntas.length} votación{preguntas.length !== 1 ? 'es' : ''} cerrada{preguntas.length !== 1 ? 's' : ''}
+          </Text>
+          {preguntas.length > 0 && (
+            <TouchableOpacity
+              style={[styles.btnResumen, exportandoResumen && { opacity: 0.6 }]}
+              onPress={exportarResumen}
+              disabled={exportandoResumen}
+              activeOpacity={0.8}
+            >
+              {exportandoResumen
+                ? <ActivityIndicator color={C.blanco} size="small" />
+                : <Text style={styles.btnResumenTxt}>📄 Resumen Completo</Text>
+              }
+            </TouchableOpacity>
+          )}
+        </View>
       }
       ListEmptyComponent={
         <View style={styles.vacio}>
@@ -135,10 +160,19 @@ export default function HistorialScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.fondo, paddingHorizontal: 16 },
   centro: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.fondo },
-  titulo: {
-    fontSize: 13, fontWeight: '800', color: C.txtSecundario,
-    letterSpacing: 1, marginBottom: 14,
+  headerRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8,
   },
+  titulo: {
+    fontSize: 13, fontWeight: '800', color: C.txtSecundario, letterSpacing: 1,
+  },
+  btnResumen: {
+    backgroundColor: '#065F46', borderRadius: 8,
+    paddingVertical: 10, paddingHorizontal: 14,
+    alignItems: 'center', minHeight: 40,
+  },
+  btnResumenTxt: { color: C.blanco, fontWeight: '800', fontSize: 13 },
   tarjeta: {
     backgroundColor: C.blanco, borderRadius: 14, padding: 16,
     marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },

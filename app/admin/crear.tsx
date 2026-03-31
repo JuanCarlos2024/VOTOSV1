@@ -64,7 +64,7 @@ export default function CrearPreguntaScreen() {
         .insert({
           texto: texto.trim(),
           tipo,
-          estado: 'borrador',
+          estado: 'pendiente',
           max_selecciones: max,
         })
         .select()
@@ -91,7 +91,7 @@ export default function CrearPreguntaScreen() {
         }
       }
 
-      setExito('✅ Pregunta guardada como borrador');
+      setExito('✅ Pregunta guardada como pendiente');
       setTimeout(() => router.replace('/admin/preguntas'), 1200);
     } finally {
       setGuardando(false);
@@ -205,7 +205,7 @@ export default function CrearPreguntaScreen() {
         {guardando ? (
           <ActivityIndicator color="#FFF" />
         ) : (
-          <Text style={styles.botonGuardarTexto}>GUARDAR COMO BORRADOR</Text>
+          <Text style={styles.botonGuardarTexto}>GUARDAR PREGUNTA</Text>
         )}
       </TouchableOpacity>
     </ScrollView>

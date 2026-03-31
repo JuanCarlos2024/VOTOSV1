@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Logo from '../Logo';
 import { C, SIZES, SHADOWS } from '../../lib/theme';
 import type { Usuario } from '../../lib/supabase';
@@ -14,8 +15,9 @@ export type PresHeaderProps = {
 export default function PresHeader({
   usuario, conectado, msgPendiente, onClearMsg, onLogout,
 }: PresHeaderProps) {
+  const insets = useSafeAreaInsets();
   return (
-    <>
+    <View style={{ paddingTop: insets.top, backgroundColor: C.fondo }}>
       {!conectado && (
         <View style={styles.banner}>
           <Text style={styles.bannerTxt}>🔴 SIN CONEXIÓN — Los cambios pueden no reflejarse</Text>
@@ -58,7 +60,7 @@ export default function PresHeader({
           <Text style={styles.btnSalirTxt}>Salir</Text>
         </TouchableOpacity>
       </View>
-    </>
+    </View>
   );
 }
 

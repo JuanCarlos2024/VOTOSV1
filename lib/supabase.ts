@@ -27,10 +27,12 @@ export type Pregunta = {
   id: string;
   texto: string;
   tipo: 'reglamento' | 'eleccion';
-  estado: 'borrador' | 'activa' | 'cerrada';
+  estado: 'pendiente' | 'proyectada' | 'abierta' | 'cerrada';
   max_selecciones: number;
   created_at: string;
   unanimidad?: boolean;
+  fecha_apertura?: string | null;
+  fecha_cierre?: string | null;
 };
 
 export type Candidato = {

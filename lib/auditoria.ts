@@ -5,23 +5,42 @@ export type TipoAudit =
   | 'LOGIN'
   | 'LOGOUT'
   | 'VOTO'
+  | 'PROYECTAR'
   | 'LIBERAR'
   | 'CERRAR'
   | 'RESET'
   | 'TIMEOUT'
-  | 'UNANIMIDAD';
+  | 'UNANIMIDAD'
+  | 'EDITAR';
+
+export type AuditoriaExtra = {
+  usuario_id?: string;
+  asociacion_nombre?: string;
+  pregunta_id?: string;
+  pregunta_texto?: string;
+};
 
 export async function registrar(
-  tipo: TipoAudit,
+  accion: TipoAudit,
   nombre_usuario: string,
-  detalle: string
+  detalle: string,
+  extra?: AuditoriaExtra
 ): Promise<void> {
   try {
+    const dispositivo = Platform.OS === 'web'
+      ? (typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 200) : 'web')
+      : Platform.OS;
+
     await supabase.from('auditoria').insert({
-      tipo,
+      accion,
       nombre_usuario,
       detalle,
-      plataforma: Platform.OS,
+      dispositivo,
+      fecha: new Date().toISOString(),
+      usuario_id:        extra?.usuario_id        ?? null,
+      asociacion_nombre: extra?.asociacion_nombre ?? null,
+      pregunta_id:       extra?.pregunta_id       ?? null,
+      pregunta_texto:    extra?.pregunta_texto     ?? null,
     });
   } catch {
     // Fail silently — audit is non-critical

@@ -73,7 +73,7 @@ export default function ProyeccionScreen() {
     setTotalPresidentes(count ?? 0);
 
     const { data: preg } = await supabase
-      .from('preguntas').select('*').eq('estado', 'activa').maybeSingle();
+      .from('preguntas').select('*').in('estado', ['proyectada', 'abierta']).maybeSingle();
 
     if (!preg) {
       // Detect if last active question was closed by unanimidad → show special screen
@@ -96,6 +96,16 @@ export default function ProyeccionScreen() {
 
     preguntaActivaRef.current = preg as Pregunta;
     setPregunta(preg as Pregunta);
+
+    // Si está proyectada → solo mostrar el texto, sin cargar votos
+    if (preg.estado === 'proyectada') {
+      setVotos([]);
+      setCandidatos([]);
+      setVotantes([]);
+      setTotalVotaron(0);
+      setCargando(false);
+      return;
+    }
 
     const { data: rawVotos } = await supabase
       .from('votos')
@@ -205,16 +215,44 @@ export default function ProyeccionScreen() {
           <Text style={styles.txtEspera}>FEDERACIÓN DEL RODEO CHILENO</Text>
           <Text style={styles.txtEsperaSub}>Esperando el inicio de la votación...</Text>
         </View>
-      ) : (
-        <>
-          {/* Pregunta */}
-          <View style={styles.preguntaCard}>
+      ) : pregunta?.estado === 'proyectada' ? (
+        /* ── Pantalla EN REVISIÓN ── */
+        <View style={styles.revisionWrap}>
+          <View style={styles.revisionBadgeRow}>
+            <View style={styles.revisionBadge}>
+              <View style={styles.revisionDot} />
+              <Text style={styles.revisionBadgeTxt}>EN REVISIÓN</Text>
+            </View>
             <View style={[styles.badge, { backgroundColor: pregunta.tipo === 'reglamento' ? C.rojo : '#4F46E5' }]}>
               <Text style={styles.badgeTxt}>
                 {pregunta.tipo === 'reglamento' ? '📜 REGLAMENTO' : '🗳 ELECCIÓN'}
               </Text>
             </View>
+          </View>
+          <View style={[styles.preguntaCard, { borderColor: '#F59E0B', marginTop: 24, flex: 1, justifyContent: 'center' }]}>
+            <Text style={styles.revisionLabel}>PRÓXIMA VOTACIÓN</Text>
             <Text style={styles.preguntaTxt}>{pregunta.texto}</Text>
+          </View>
+          <View style={styles.revisionInfoRow}>
+            <Text style={styles.revisionInfoTxt}>
+              La votación aún no ha sido habilitada por el administrador
+            </Text>
+          </View>
+          <View style={styles.liveRow}>
+            <View style={[styles.liveDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={[styles.liveTxt, { color: '#F59E0B' }]}>ACTUALIZÁNDOSE EN TIEMPO REAL</Text>
+          </View>
+        </View>
+      ) : (
+        <>
+          {/* Pregunta */}
+          <View style={styles.preguntaCard}>
+            <View style={[styles.badge, { backgroundColor: pregunta!.tipo === 'reglamento' ? C.rojo : '#4F46E5' }]}>
+              <Text style={styles.badgeTxt}>
+                {pregunta!.tipo === 'reglamento' ? '📜 REGLAMENTO' : '🗳 ELECCIÓN'}
+              </Text>
+            </View>
+            <Text style={styles.preguntaTxt}>{pregunta!.texto}</Text>
           </View>
 
           {/* Contador de participación */}
@@ -468,6 +506,29 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#4ADE80' },
   liveTxt: { color: '#4ADE80', fontSize: 14, fontWeight: '800', letterSpacing: 2 },
+
+  // EN REVISIÓN
+  revisionWrap: { flex: 1, paddingBottom: 32 },
+  revisionBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  revisionBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(245,158,11,0.15)', borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: '#F59E0B',
+  },
+  revisionDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#F59E0B' },
+  revisionBadgeTxt: { color: '#F59E0B', fontSize: 14, fontWeight: '900', letterSpacing: 2 },
+  revisionLabel: {
+    color: '#F59E0B', fontSize: 13, fontWeight: '900',
+    letterSpacing: 2, textAlign: 'center', marginBottom: 16,
+  },
+  revisionInfoRow: {
+    marginTop: 20, alignItems: 'center', paddingHorizontal: 16,
+  },
+  revisionInfoTxt: {
+    color: 'rgba(255,255,255,0.45)', fontSize: 18,
+    textAlign: 'center', fontStyle: 'italic',
+  },
 
   // Unanimidad fullscreen
   unanimidadBg: {

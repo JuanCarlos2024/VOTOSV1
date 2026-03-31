@@ -49,7 +49,10 @@ export default function LoginScreen() {
       }
 
       await guardarUsuario(usuario);
-      await registrar('LOGIN', usuario.nombre_usuario, `Inicio de sesión — ${usuario.rol}`);
+      await registrar('LOGIN', usuario.nombre_usuario, `Inicio de sesión — ${usuario.rol}`, {
+        usuario_id: usuario.id,
+        asociacion_nombre: usuario.rol === 'presidente' ? usuario.nombre_usuario : undefined,
+      });
 
       if (usuario.rol === 'administrador') {
         router.replace('/admin');

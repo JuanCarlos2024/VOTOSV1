@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { C, SIZES, VOTO_COLORS, SHADOWS } from '../../lib/theme';
 import PresHeader, { PresHeaderProps } from './PresHeader';
@@ -7,13 +8,15 @@ import type { Pregunta, Candidato } from '../../lib/supabase';
 type Props = PresHeaderProps & {
   pregunta: Pregunta;
   tipo: 'reglamento' | 'eleccion';
-  miRespuesta: string;          // solo para reglamento
-  candidatosVotados: Candidato[]; // solo para eleccion
+  miRespuesta: string;
+  candidatosVotados: Candidato[];
+  onActualizar: () => Promise<void>;
 };
 
 export default function YaVoto({
-  pregunta, tipo, miRespuesta, candidatosVotados, ...headerProps
+  pregunta, tipo, miRespuesta, candidatosVotados, onActualizar, ...headerProps
 }: Props) {
+  const [actualizando, setActualizando] = useState(false);
   const esReg = tipo === 'reglamento';
   const col = esReg
     ? (VOTO_COLORS[miRespuesta] ?? { bg: '#F3F4F6', border: '#9CA3AF', text: '#374151', bgSolid: '#6B7280', icon: '⬜' })
@@ -67,6 +70,28 @@ export default function YaVoto({
         </View>
       </View>
 
+      {/* Botón actualizar — verifica si el admin reinició el voto */}
+      <TouchableOpacity
+        style={[styles.btnActualizar, actualizando && { opacity: 0.6 }]}
+        onPress={async () => {
+          setActualizando(true);
+          await onActualizar();
+          setActualizando(false);
+        }}
+        disabled={actualizando}
+        activeOpacity={0.8}
+      >
+        {actualizando
+          ? <ActivityIndicator color={C.azul} size="small" />
+          : <Text style={styles.btnActualizarTxt}>🔄 Actualizar</Text>
+        }
+        {!actualizando && (
+          <Text style={styles.btnActualizarSub}>
+            Si el administrador reinició tu voto, presiona aquí para actualizar
+          </Text>
+        )}
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.btnHistorial}
         onPress={() => router.push('/historial-presidente')}
@@ -108,10 +133,22 @@ const styles = StyleSheet.create({
   candCheck: { color: '#16A34A', fontSize: 20, fontWeight: '900' },
   candNombre: { fontSize: SIZES.txtBody, fontWeight: '700', flex: 1 },
   pesoTxt: { fontSize: SIZES.txtCaption, color: C.txtTercero, marginTop: 4 },
+  btnActualizar: {
+    borderWidth: 1.5, borderColor: C.azul, borderRadius: SIZES.radiusMd,
+    paddingVertical: 14, paddingHorizontal: 20,
+    alignItems: 'center', marginTop: 16, minHeight: SIZES.touchSecondary,
+    justifyContent: 'center', backgroundColor: '#EEF2FF', gap: 6,
+  },
+  btnActualizarTxt: {
+    color: C.azul, fontSize: SIZES.txtBody, fontWeight: '800',
+  },
+  btnActualizarSub: {
+    color: C.txtSecundario, fontSize: 13, textAlign: 'center', lineHeight: 18,
+  },
   btnHistorial: {
     backgroundColor: C.azul, borderRadius: SIZES.radiusMd,
     paddingVertical: 18, alignItems: 'center',
-    marginTop: 16, minHeight: SIZES.touchMin, justifyContent: 'center',
+    marginTop: 12, minHeight: SIZES.touchMin, justifyContent: 'center',
     ...SHADOWS.cardAzul,
   },
   btnHistorialTxt: {

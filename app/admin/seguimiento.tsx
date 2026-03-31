@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, TouchableOpacity, Modal,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { registrar } from '../../lib/auditoria';
 import { C } from '../../lib/theme';
 
 type Fila = {
@@ -29,6 +30,9 @@ export default function SeguimientoScreen() {
   const [cargando, setCargando] = useState(true);
   const [resumenReg, setResumenReg] = useState<Record<string, number>>({});
   const [rankingElec, setRankingElec] = useState<CandRanking[]>([]);
+  const [estadoPregunta, setEstadoPregunta] = useState<string>('');
+  const [reiniciando, setReiniciando] = useState<string | null>(null);
+  const [modalReiniciar, setModalReiniciar] = useState<Fila | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -53,10 +57,13 @@ export default function SeguimientoScreen() {
     setCargando(true);
     const esReg = tipo === 'reglamento';
 
-    const [{ data: usuarios }, { data: votos }] = await Promise.all([
+    const [{ data: usuarios }, { data: votos }, { data: pregunta }] = await Promise.all([
       supabase.from('usuarios').select('id, nombre_usuario, votos_disponibles').eq('rol', 'presidente').order('nombre_usuario'),
       supabase.from('votos').select('usuario_id, candidato_id, respuesta, peso').eq('pregunta_id', id),
+      supabase.from('preguntas').select('estado').eq('id', id).single(),
     ]);
+
+    setEstadoPregunta(pregunta?.estado ?? '');
 
     const votosMap: Record<string, string> = {};
     const votadosIds = new Set<string>();
@@ -94,6 +101,44 @@ export default function SeguimientoScreen() {
       ...(esReg && { respuesta: votosMap[u.id] }),
     })));
     setCargando(false);
+  }
+
+  async function confirmarReinicio() {
+    if (!modalReiniciar) return;
+    const fila = modalReiniciar;
+    setModalReiniciar(null);
+    setReiniciando(fila.id);
+
+    try {
+      // Validar que la pregunta siga abierta antes de borrar
+      const { data: preg } = await supabase
+        .from('preguntas').select('estado').eq('id', id).single();
+
+      if (preg?.estado !== 'abierta') {
+        setReiniciando(null);
+        return;
+      }
+
+      await supabase.from('votos')
+        .delete()
+        .eq('pregunta_id', id)
+        .eq('usuario_id', fila.id);
+
+      await registrar(
+        'RESET',
+        'admin',
+        `Admin reinició voto de ${fila.nombre_usuario}`,
+        {
+          asociacion_nombre: fila.nombre_usuario,
+          pregunta_id: id,
+          pregunta_texto: decodeURIComponent(texto ?? '').slice(0, 120),
+        },
+      );
+
+      cargar();
+    } finally {
+      setReiniciando(null);
+    }
   }
 
   const totalVotaron = filas.filter(f => f.ha_votado).length;
@@ -208,43 +253,61 @@ export default function SeguimientoScreen() {
 
   function renderFila({ item }: { item: Fila }) {
     const respMeta = item.respuesta ? (COLOR_RESP[item.respuesta] ?? null) : null;
+    const estaReiniciando = reiniciando === item.id;
 
     return (
       <View style={[styles.fila, item.ha_votado ? styles.filaVotada : styles.filaPendiente]}>
-        <View style={[styles.estadoCirculo, { backgroundColor: item.ha_votado ? '#F0FDF4' : '#FEF2F2' }]}>
-          <Text style={styles.estadoIcono}>{item.ha_votado ? '✅' : '❌'}</Text>
+        {/* Fila principal */}
+        <View style={styles.filaRow}>
+          <View style={[styles.estadoCirculo, { backgroundColor: item.ha_votado ? '#F0FDF4' : '#FEF2F2' }]}>
+            <Text style={styles.estadoIcono}>{item.ha_votado ? '✅' : '❌'}</Text>
+          </View>
+
+          <View style={styles.filaInfo}>
+            <Text style={[styles.nombre, { color: item.ha_votado ? C.txtPrimario : C.txtSecundario }]}>
+              {item.nombre_usuario}
+            </Text>
+            <Text style={styles.peso}>{item.votos_disponibles} voto(s) de peso</Text>
+          </View>
+
+          {tipo === 'reglamento' ? (
+            item.ha_votado && respMeta ? (
+              <View style={[styles.tagRespuesta, { backgroundColor: respMeta.bg, borderColor: respMeta.border }]}>
+                <Text style={styles.tagIcono}>{respMeta.icono}</Text>
+                <Text style={[styles.tagTxt, { color: respMeta.color }]}>
+                  {item.respuesta!.toUpperCase()}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.tagPendiente}>
+                <Text style={styles.tagPendienteTxt}>PENDIENTE</Text>
+              </View>
+            )
+          ) : (
+            item.ha_votado ? (
+              <View style={[styles.tagRespuesta, { backgroundColor: '#F0FDF4', borderColor: '#16A34A' }]}>
+                <Text style={[styles.tagTxt, { color: '#16A34A' }]}>VOTÓ</Text>
+              </View>
+            ) : (
+              <View style={styles.tagPendiente}>
+                <Text style={styles.tagPendienteTxt}>PENDIENTE</Text>
+              </View>
+            )
+          )}
         </View>
 
-        <View style={styles.filaInfo}>
-          <Text style={[styles.nombre, { color: item.ha_votado ? C.txtPrimario : C.txtSecundario }]}>
-            {item.nombre_usuario}
-          </Text>
-          <Text style={styles.peso}>{item.votos_disponibles} voto(s) de peso</Text>
-        </View>
-
-        {tipo === 'reglamento' ? (
-          item.ha_votado && respMeta ? (
-            <View style={[styles.tagRespuesta, { backgroundColor: respMeta.bg, borderColor: respMeta.border }]}>
-              <Text style={styles.tagIcono}>{respMeta.icono}</Text>
-              <Text style={[styles.tagTxt, { color: respMeta.color }]}>
-                {item.respuesta!.toUpperCase()}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.tagPendiente}>
-              <Text style={styles.tagPendienteTxt}>PENDIENTE</Text>
-            </View>
-          )
-        ) : (
-          item.ha_votado ? (
-            <View style={[styles.tagRespuesta, { backgroundColor: '#F0FDF4', borderColor: '#16A34A' }]}>
-              <Text style={[styles.tagTxt, { color: '#16A34A' }]}>VOTÓ</Text>
-            </View>
-          ) : (
-            <View style={styles.tagPendiente}>
-              <Text style={styles.tagPendienteTxt}>PENDIENTE</Text>
-            </View>
-          )
+        {/* Botón reiniciar — solo si ya votó Y la pregunta está abierta */}
+        {item.ha_votado && estadoPregunta === 'abierta' && (
+          <TouchableOpacity
+            style={[styles.btnReiniciar, estaReiniciando && { opacity: 0.5 }]}
+            onPress={() => setModalReiniciar(item)}
+            disabled={estaReiniciando}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.btnReiniciarTxt}>
+              {estaReiniciando ? '⏳ Reiniciando...' : '↺ Reiniciar voto'}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     );
@@ -265,6 +328,38 @@ export default function SeguimientoScreen() {
           ListEmptyComponent={<Text style={styles.vacio}>No hay presidentes registrados</Text>}
         />
       )}
+
+      {/* Modal confirmación reinicio */}
+      <Modal visible={modalReiniciar !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitulo}>↺ Reiniciar voto</Text>
+            <Text style={styles.modalMsg}>
+              ¿Estás seguro de reiniciar el voto de{'\n'}
+              <Text style={{ fontWeight: '900', color: C.txtPrimario }}>
+                {modalReiniciar?.nombre_usuario}
+              </Text>
+              ?{'\n\n'}Podrá votar nuevamente. El nuevo voto reemplazará al anterior.
+            </Text>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.modalBtnCancelar}
+                onPress={() => setModalReiniciar(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnCancelarTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalBtnConfirmar}
+                onPress={confirmarReinicio}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnConfirmarTxt}>Reiniciar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -326,9 +421,11 @@ const styles = StyleSheet.create({
 
   // Filas
   fila: {
-    flexDirection: 'row', alignItems: 'center',
     borderRadius: 12, padding: 14, marginBottom: 8,
     borderWidth: 1.5, gap: 10,
+  },
+  filaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
   },
   filaVotada: {
     backgroundColor: C.blanco,
@@ -346,6 +443,16 @@ const styles = StyleSheet.create({
   filaInfo: { flex: 1, gap: 2 },
   nombre: { fontSize: 15, fontWeight: '700' },
   peso: { color: C.txtTercero, fontSize: 11 },
+  btnReiniciar: {
+    marginTop: 6, borderRadius: 8,
+    paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1, borderColor: '#D97706',
+    alignSelf: 'flex-start',
+  },
+  btnReiniciarTxt: {
+    color: '#92400E', fontSize: 12, fontWeight: '800', letterSpacing: 0.3,
+  },
 
   // Tags de respuesta
   tagRespuesta: {
@@ -363,4 +470,32 @@ const styles = StyleSheet.create({
   tagPendienteTxt: { color: '#B45309', fontSize: 11, fontWeight: '800' },
 
   vacio: { color: C.txtSecundario, fontSize: 16, textAlign: 'center', paddingTop: 60 },
+
+  // Modal reinicio
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modalCard: {
+    backgroundColor: C.blanco, borderRadius: 16,
+    padding: 24, width: '100%', maxWidth: 400, gap: 16,
+  },
+  modalTitulo: {
+    fontSize: 18, fontWeight: '900', color: C.txtPrimario, textAlign: 'center',
+  },
+  modalMsg: {
+    fontSize: 15, color: C.txtSecundario, textAlign: 'center', lineHeight: 22,
+  },
+  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  modalBtnCancelar: {
+    flex: 1, borderWidth: 1.5, borderColor: C.borde,
+    borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+    backgroundColor: C.tarjeta,
+  },
+  modalBtnCancelarTxt: { color: C.txtSecundario, fontSize: 15, fontWeight: '700' },
+  modalBtnConfirmar: {
+    flex: 1, backgroundColor: '#DC2626',
+    borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+  },
+  modalBtnConfirmarTxt: { color: C.blanco, fontSize: 15, fontWeight: '900' },
 });

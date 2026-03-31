@@ -38,9 +38,9 @@ export default function ConfirmacionReglamento({
           </Text>
         </View>
 
-        {/* Peso del voto — prominente */}
-        <View style={[styles.pesoBadge, { backgroundColor: col.bgSolid }]}>
-          <Text style={styles.pesoTxt}>
+        {/* Peso del voto — prominente, fondo pálido del color de la opción */}
+        <View style={[styles.pesoBadge, { backgroundColor: col.bg, borderColor: col.border }]}>
+          <Text style={[styles.pesoTxt, { color: col.text }]}>
             Esto emitirá {usuario.votos_disponibles} voto{usuario.votos_disponibles !== 1 ? 's' : ''} a nombre de tu asociación
           </Text>
         </View>
@@ -80,15 +80,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16,
   },
   card: {
-    flex: 1, backgroundColor: C.tarjeta, borderRadius: SIZES.radiusLg,
-    padding: 24, borderWidth: 1, borderColor: C.borde, gap: 16,
+    flex: 1, backgroundColor: C.blanco, borderRadius: SIZES.radiusLg,
+    padding: 24, borderWidth: 2, borderColor: C.bordeCard, gap: 16,
+    shadowColor: '#0A1929', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10, shadowRadius: 12, elevation: 5,
   },
   preguntaTxt: {
     fontSize: SIZES.txtCaption, color: C.txtSecundario,
     lineHeight: 22, fontStyle: 'italic',
   },
   titulo: {
-    fontSize: 30, fontWeight: '900', color: C.txtPrimario, textAlign: 'center',
+    fontSize: 30, fontWeight: '900', color: '#111827', textAlign: 'center',
   },
   opcionBox: {
     borderWidth: 3, borderRadius: SIZES.radiusMd,
@@ -98,16 +100,17 @@ const styles = StyleSheet.create({
   opcionIcono: { fontSize: 40 },
   opcionTxt: { fontSize: 38, fontWeight: '900', letterSpacing: 2 },
   pesoBadge: {
-    borderRadius: SIZES.radiusSm, paddingVertical: 12, paddingHorizontal: 16,
-    alignItems: 'center',
+    borderRadius: SIZES.radiusSm, paddingVertical: 14, paddingHorizontal: 16,
+    alignItems: 'center', borderWidth: 2,
   },
   pesoTxt: {
-    color: C.blanco, fontSize: SIZES.txtBody,
-    fontWeight: '700', textAlign: 'center', lineHeight: 24,
+    fontSize: SIZES.txtBody, fontWeight: '800', textAlign: 'center', lineHeight: 24,
   },
   aviso: {
-    fontSize: SIZES.txtCaption, color: C.txtSecundario,
+    fontSize: SIZES.txtCaption, color: '#92400E', fontWeight: '700',
     textAlign: 'center', lineHeight: 22,
+    backgroundColor: '#FEF3C7', borderRadius: SIZES.radiusSm,
+    paddingVertical: 10, paddingHorizontal: 14,
   },
   btnConfirmar: {
     borderRadius: SIZES.radiusMd, paddingVertical: 22,
@@ -117,9 +120,9 @@ const styles = StyleSheet.create({
     color: C.blanco, fontSize: SIZES.txtSubtitulo, fontWeight: '900', letterSpacing: 1,
   },
   btnVolver: {
-    borderWidth: 1.5, borderColor: C.borde, borderRadius: SIZES.radiusMd,
+    borderWidth: 2, borderColor: C.bordeCard, borderRadius: SIZES.radiusMd,
     paddingVertical: 16, alignItems: 'center',
     minHeight: SIZES.touchSecondary, backgroundColor: C.tarjeta,
   },
-  btnVolverTxt: { color: C.txtSecundario, fontSize: SIZES.txtBody, fontWeight: '700' },
+  btnVolverTxt: { color: '#374151', fontSize: SIZES.txtBody, fontWeight: '800' },
 });

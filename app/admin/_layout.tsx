@@ -1,4 +1,5 @@
-import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Platform, View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Stack, Slot, usePathname, router } from 'expo-router';
 import { cerrarSesion } from '../../lib/auth';
 import Logo from '../../components/Logo';
@@ -44,7 +45,10 @@ const NAV = [
 ];
 
 function WebLayout() {
-  const pathname = usePathname();
+  const pathname  = usePathname();
+  const { width } = useWindowDimensions();
+  const esMovil   = width < 768;
+  const [sidebarAbierto, setSidebarAbierto] = useState(false);
 
   async function salir() {
     await cerrarSesion();
@@ -55,69 +59,108 @@ function WebLayout() {
     return pathname === path || pathname.startsWith(path + '?');
   }
 
+  function navegar(path: string) {
+    router.push(path as any);
+    if (esMovil) setSidebarAbierto(false);
+  }
+
+  const sidebarVisible = !esMovil || sidebarAbierto;
+
   return (
     <View style={web.shell}>
-      {/* ── Sidebar ── */}
-      <View style={web.sidebar}>
-        {/* Marca */}
-        <View style={web.brand}>
-          <Logo size={72} style={{ marginBottom: 8 }} />
-          <Text style={web.brandTitulo}>RODEO CHILENO</Text>
-          <Text style={web.brandSub}>Panel Administrador</Text>
-        </View>
-
-        {/* Navegación */}
-        <View style={web.nav}>
-          {NAV.map(item => {
-            const activo = isActive(item.path);
-            return (
-              <TouchableOpacity
-                key={item.path}
-                style={[web.navItem, activo && web.navItemActivo]}
-                onPress={() => router.push(item.path as any)}
-                activeOpacity={0.75}
-              >
-                <Text style={web.navIcono}>{item.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[web.navLabel, activo && web.navLabelActivo]}>
-                    {item.label}
-                  </Text>
-                  <Text style={web.navDesc}>{item.desc}</Text>
-                </View>
-                {activo && <View style={web.navIndicador} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Separador */}
-        <View style={web.divider} />
-
-        {/* Proyección (abre en nueva pestaña) */}
+      {/* ── Overlay para cerrar sidebar en móvil ── */}
+      {esMovil && sidebarAbierto && (
         <TouchableOpacity
-          style={web.navItem}
-          onPress={() => {
-            // En web abre la ruta de proyección
-            router.push('/proyeccion' as any);
-          }}
-          activeOpacity={0.75}
-        >
-          <Text style={web.navIcono}>📺</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={web.navLabel}>Ver Proyección</Text>
-            <Text style={web.navDesc}>Pantalla para proyector</Text>
-          </View>
-        </TouchableOpacity>
+          style={web.overlay}
+          onPress={() => setSidebarAbierto(false)}
+          activeOpacity={1}
+        />
+      )}
 
-        {/* Botón salir */}
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity style={web.btnSalir} onPress={salir} activeOpacity={0.8}>
-          <Text style={web.btnSalirTxt}>CERRAR SESIÓN</Text>
-        </TouchableOpacity>
-      </View>
+      {/* ── Sidebar ── */}
+      {sidebarVisible && (
+        <View style={[web.sidebar, esMovil && web.sidebarFloating]}>
+          {/* Botón cerrar en móvil */}
+          {esMovil && (
+            <TouchableOpacity
+              style={web.btnCerrarSidebar}
+              onPress={() => setSidebarAbierto(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={web.btnCerrarSidebarTxt}>✕</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Marca */}
+          <View style={web.brand}>
+            <Logo size={60} style={{ marginBottom: 6 }} />
+            <Text style={web.brandTitulo}>RODEO CHILENO</Text>
+            <Text style={web.brandSub}>Panel Administrador</Text>
+          </View>
+
+          {/* Navegación */}
+          <View style={web.nav}>
+            {NAV.map(item => {
+              const activo = isActive(item.path);
+              return (
+                <TouchableOpacity
+                  key={item.path}
+                  style={[web.navItem, activo && web.navItemActivo]}
+                  onPress={() => navegar(item.path)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={web.navIcono}>{item.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[web.navLabel, activo && web.navLabelActivo]}>
+                      {item.label}
+                    </Text>
+                    <Text style={web.navDesc}>{item.desc}</Text>
+                  </View>
+                  {activo && <View style={web.navIndicador} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Separador */}
+          <View style={web.divider} />
+
+          {/* Proyección */}
+          <TouchableOpacity
+            style={web.navItem}
+            onPress={() => navegar('/proyeccion')}
+            activeOpacity={0.75}
+          >
+            <Text style={web.navIcono}>📺</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={web.navLabel}>Ver Proyección</Text>
+              <Text style={web.navDesc}>Pantalla para proyector</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Botón salir */}
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity style={web.btnSalir} onPress={salir} activeOpacity={0.8}>
+            <Text style={web.btnSalirTxt}>CERRAR SESIÓN</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Contenido principal ── */}
       <View style={web.main}>
+        {/* Topbar en móvil */}
+        {esMovil && (
+          <View style={web.topbar}>
+            <TouchableOpacity
+              style={web.btnHamburger}
+              onPress={() => setSidebarAbierto(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={web.btnHamburgerTxt}>☰</Text>
+            </TouchableOpacity>
+            <Text style={web.topbarTitulo}>Panel Admin</Text>
+          </View>
+        )}
         <Slot />
       </View>
     </View>
@@ -228,6 +271,64 @@ const web = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1.5,
+  },
+
+  // Sidebar flotante móvil
+  sidebarFloating: {
+    position: 'absolute' as any,
+    top: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+
+  // Overlay oscuro al abrir sidebar en móvil
+  overlay: {
+    position: 'absolute' as any,
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 99,
+  },
+
+  // Botón cerrar sidebar (móvil)
+  btnCerrarSidebar: {
+    alignSelf: 'flex-end',
+    padding: 8,
+    marginBottom: 4,
+  },
+  btnCerrarSidebarTxt: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+
+  // Topbar móvil (barra superior con hamburguesa)
+  topbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AZUL,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  btnHamburger: {
+    padding: 4,
+  },
+  btnHamburgerTxt: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  topbarTitulo: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 
   // Main content

@@ -15,6 +15,7 @@ import { useConexion } from '../lib/hooks/useConexion';
 import { useVotoPendiente, PENDING_KEY, type VotoPendiente } from '../lib/hooks/useVotoPendiente';
 
 import PantallaEspera from '../components/presidente/PantallaEspera';
+import PantallaPresentacion from '../components/presidente/PantallaPresentacion';
 import VotarReglamento from '../components/presidente/VotarReglamento';
 import VotarEleccion from '../components/presidente/VotarEleccion';
 import ConfirmacionReglamento from '../components/presidente/ConfirmacionReglamento';
@@ -24,6 +25,7 @@ import VotoCompletado from '../components/presidente/VotoCompletado';
 
 type Estado =
   | 'cargando' | 'sin-pregunta'
+  | 'proyectada'
   | 'votando-reglamento' | 'confirmando-reglamento'
   | 'votando-eleccion'  | 'confirmando-eleccion'
   | 'completado'
@@ -52,11 +54,67 @@ export default function HomeScreen() {
 
   const preguntaIdRef = useRef<string | null>(null);
   const countdownRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const estadoRef     = useRef<Estado>('cargando');
+
+  // Mantener estadoRef siempre fresco (evita stale closures en el intervalo)
+  estadoRef.current = estado;
 
   // ── Effects ────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // Polling único persistente cada 3s — lee estadoRef.current (siempre fresco)
+  // No depende de [estado] → nunca se recrea, nunca reinicia su cuenta regresiva
+  useEffect(() => {
+    const ESTADOS_ESPERA: Estado[]    = ['sin-pregunta'];
+    const ESTADOS_PROYECTADA: Estado[] = ['proyectada'];
+    const ESTADOS_VOTANDO: Estado[]   = [
+      'votando-reglamento', 'confirmando-reglamento',
+      'votando-eleccion',   'confirmando-eleccion',
+    ];
+
+    pollRef.current = setInterval(async () => {
+      const est = estadoRef.current;
+
+      if (ESTADOS_ESPERA.includes(est)) {
+        // Detectar cuando el admin proyecta o abre una votación
+        const { data } = await supabase
+          .from('preguntas').select('id').in('estado', ['proyectada', 'abierta']).maybeSingle();
+        if (data) cargar();
+
+      } else if (ESTADOS_PROYECTADA.includes(est)) {
+        // Detectar cambios de texto o de estado mientras está proyectada
+        const id = preguntaIdRef.current;
+        if (!id) return;
+        const { data } = await supabase
+          .from('preguntas').select('estado, texto').eq('id', id).maybeSingle();
+        if (!data || data.estado === 'pendiente') {
+          preguntaIdRef.current = null;
+          setEstado('sin-pregunta');
+        } else if (data.estado === 'abierta') {
+          cargar();
+        } else if (data.estado === 'proyectada') {
+          // Actualizar texto en tiempo real si el admin lo editó
+          setPregunta(prev => prev ? { ...prev, texto: data.texto } : prev);
+        }
+
+      } else if (ESTADOS_VOTANDO.includes(est)) {
+        // Detectar si el admin cerró la votación mientras el presidente vota
+        const id = preguntaIdRef.current;
+        if (!id) return;
+        const { data } = await supabase
+          .from('preguntas').select('estado').eq('id', id).maybeSingle();
+        if (data?.estado === 'cerrada') setModalCerrado(true);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
   }, []);
 
@@ -66,10 +124,29 @@ export default function HomeScreen() {
       .channel('home-preguntas-cambios')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'preguntas' }, payload => {
         const nueva = payload.new as any;
-        if (nueva.id === preguntaIdRef.current && nueva.estado === 'cerrada') {
-          setModalCerrado(true);
+
+        // Pregunta que el presidente está viendo o votando
+        if (nueva.id === preguntaIdRef.current) {
+          if (nueva.estado === 'cerrada') {
+            setModalCerrado(true);
+          } else if (nueva.estado === 'abierta' && estadoRef.current === 'proyectada') {
+            // Admin liberó la votación — pasar a flujo de voto
+            cargar();
+          } else if (nueva.estado === 'pendiente' && estadoRef.current === 'proyectada') {
+            // Admin retiró la proyección
+            preguntaIdRef.current = null;
+            setEstado('sin-pregunta');
+          } else if (nueva.estado === 'proyectada') {
+            // Admin editó el texto mientras estaba proyectada
+            setPregunta(prev => prev ? { ...prev, texto: nueva.texto } : prev);
+          }
         }
-        if (nueva.estado === 'activa') cargar();
+
+        // Nueva pregunta proyectada o abierta — detectar desde espera
+        if ((nueva.estado === 'proyectada' || nueva.estado === 'abierta') &&
+            estadoRef.current === 'sin-pregunta') {
+          cargar();
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -96,25 +173,49 @@ export default function HomeScreen() {
     setSeleccionados([]);
     setOpcionPendiente('');
 
-    const { data: pregActiva } = await supabase
-      .from('preguntas').select('*').eq('estado', 'activa').maybeSingle();
+    // Buscar pregunta proyectada o abierta
+    const { data: pregVisible } = await supabase
+      .from('preguntas').select('*')
+      .in('estado', ['proyectada', 'abierta'])
+      .maybeSingle();
 
-    if (!pregActiva) { setEstado('sin-pregunta'); preguntaIdRef.current = null; return; }
-    setPregunta(pregActiva as Pregunta);
-    preguntaIdRef.current = pregActiva.id;
+    if (!pregVisible) {
+      // Si el usuario estaba votando y la pregunta desapareció → admin la cerró
+      const estabaVotando: Estado[] = [
+        'votando-reglamento', 'confirmando-reglamento',
+        'votando-eleccion',   'confirmando-eleccion',
+      ];
+      if (preguntaIdRef.current && estabaVotando.includes(estadoRef.current)) {
+        setModalCerrado(true);
+      } else {
+        setEstado('sin-pregunta');
+      }
+      preguntaIdRef.current = null;
+      return;
+    }
 
+    setPregunta(pregVisible as Pregunta);
+    preguntaIdRef.current = pregVisible.id;
+
+    // Si está proyectada → solo mostrar el texto, sin votar
+    if (pregVisible.estado === 'proyectada') {
+      setEstado('proyectada');
+      return;
+    }
+
+    // Estado 'abierta' → flujo normal de voto
     const { data: votoExist } = await supabase
       .from('votos').select('respuesta')
-      .eq('pregunta_id', pregActiva.id).eq('usuario_id', u.id).limit(1);
+      .eq('pregunta_id', pregVisible.id).eq('usuario_id', u.id).limit(1);
 
     if (votoExist && votoExist.length > 0) {
-      if (pregActiva.tipo === 'reglamento') {
+      if (pregVisible.tipo === 'reglamento') {
         setMiRespuesta(votoExist[0].respuesta);
         setEstado('ya-voto-reglamento');
       } else {
         const { data: misVotos } = await supabase
           .from('votos').select('candidato_id')
-          .eq('pregunta_id', pregActiva.id).eq('usuario_id', u.id);
+          .eq('pregunta_id', pregVisible.id).eq('usuario_id', u.id);
         const ids = (misVotos ?? []).map((v: any) => v.candidato_id).filter(Boolean);
         if (ids.length > 0) {
           const { data: cands } = await supabase.from('candidatos').select('*').in('id', ids);
@@ -127,9 +228,9 @@ export default function HomeScreen() {
       return;
     }
 
-    if (pregActiva.tipo === 'eleccion') {
+    if (pregVisible.tipo === 'eleccion') {
       const { data: cands } = await supabase
-        .from('candidatos').select('*').eq('pregunta_id', pregActiva.id).order('nombre');
+        .from('candidatos').select('*').eq('pregunta_id', pregVisible.id).order('nombre');
       setCandidatos((cands ?? []) as Candidato[]);
       setEstado('votando-eleccion');
     } else {
@@ -168,6 +269,13 @@ export default function HomeScreen() {
       respuesta: opcionPendiente, peso: usuario.votos_disponibles,
     };
     try {
+      // Verificar que la votación sigue activa antes de insertar
+      const { data: estadoActual } = await supabase
+        .from('preguntas').select('estado').eq('id', pregunta.id).maybeSingle();
+      if (estadoActual?.estado === 'cerrada') {
+        setModalCerrado(true);
+        return;
+      }
       const { error } = await supabase.from('votos').insert(fila);
       if (error) {
         if (!conectado) {
@@ -184,7 +292,12 @@ export default function HomeScreen() {
       }
       hapticSuccess();
       await registrar('VOTO', usuario.nombre_usuario,
-        `Reglamento: ${opcionPendiente} — ${pregunta.texto.slice(0, 60)}`);
+        `Votó: ${opcionPendiente.toUpperCase()}`, {
+        usuario_id: usuario.id,
+        asociacion_nombre: usuario.nombre_usuario,
+        pregunta_id: pregunta.id,
+        pregunta_texto: pregunta.texto.slice(0, 120),
+      });
       iniciarContador(opcionPendiente);
     } finally {
       setEnviando(false);
@@ -202,6 +315,13 @@ export default function HomeScreen() {
       peso: usuario.votos_disponibles,
     }));
     try {
+      // Verificar que la votación sigue activa antes de insertar
+      const { data: estadoActual } = await supabase
+        .from('preguntas').select('estado').eq('id', pregunta.id).maybeSingle();
+      if (estadoActual?.estado === 'cerrada') {
+        setModalCerrado(true);
+        return;
+      }
       const { error } = await supabase.from('votos').insert(filas);
       if (error) {
         if (!conectado) {
@@ -218,7 +338,12 @@ export default function HomeScreen() {
       }
       hapticSuccess();
       await registrar('VOTO', usuario.nombre_usuario,
-        `Elección: ${seleccionados.length} candidato(s) — ${pregunta.texto.slice(0, 60)}`);
+        `Votó: ${seleccionados.length} candidato(s) seleccionado(s)`, {
+        usuario_id: usuario.id,
+        asociacion_nombre: usuario.nombre_usuario,
+        pregunta_id: pregunta.id,
+        pregunta_texto: pregunta.texto.slice(0, 120),
+      });
       iniciarContador('eleccion');
     } finally {
       setEnviando(false);
@@ -228,7 +353,10 @@ export default function HomeScreen() {
   function handleLogout() {
     limpiarTimers();
     const u = usuarioRef.current;
-    if (u) registrar('LOGOUT', u.nombre_usuario, 'Cierre de sesión manual');
+    if (u) registrar('LOGOUT', u.nombre_usuario, 'Cierre de sesión manual', {
+      usuario_id: u.id,
+      asociacion_nombre: u.nombre_usuario,
+    });
     cerrarSesion().then(() => router.replace('/'));
   }
 
@@ -254,20 +382,20 @@ export default function HomeScreen() {
   return (
     <>
       {/* Modales — se renderizan sobre cualquier estado */}
-      <Modal visible={modalCerrado} transparent animationType="fade">
+      <Modal visible={modalCerrado} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalIcono}>🔒</Text>
             <Text style={styles.modalTitulo}>Votación Cerrada</Text>
             <Text style={styles.modalMsg}>
-              El administrador ha cerrado esta votación.{'\n'}Ya no es posible emitir votos.
+              Esta votación fue cerrada por el administrador.{'\n'}Su voto no ha sido registrado.
             </Text>
             <TouchableOpacity
               style={styles.modalBtn}
               onPress={() => { setModalCerrado(false); cargar(); }}
               activeOpacity={0.8}
             >
-              <Text style={styles.modalBtnTxt}>ENTENDIDO</Text>
+              <Text style={styles.modalBtnTxt}>VOLVER AL INICIO</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -296,13 +424,16 @@ export default function HomeScreen() {
       {estado === 'sin-pregunta' && (
         <PantallaEspera {...headerProps} />
       )}
+      {estado === 'proyectada' && pregunta && (
+        <PantallaPresentacion {...headerProps} pregunta={pregunta} />
+      )}
       {estado === 'ya-voto-reglamento' && (
         <YaVoto {...headerProps} pregunta={pregunta!} tipo="reglamento"
-          miRespuesta={miRespuesta} candidatosVotados={[]} />
+          miRespuesta={miRespuesta} candidatosVotados={[]} onActualizar={cargar} />
       )}
       {estado === 'ya-voto-eleccion' && (
         <YaVoto {...headerProps} pregunta={pregunta!} tipo="eleccion"
-          miRespuesta="" candidatosVotados={candidatosVotados} />
+          miRespuesta="" candidatosVotados={candidatosVotados} onActualizar={cargar} />
       )}
       {estado === 'completado' && (
         <VotoCompletado opcionConfirmada={opcionConfirmada} contador={contador} />

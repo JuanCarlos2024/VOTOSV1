@@ -39,6 +39,10 @@ export default function PreguntasScreen() {
   const [unanimidadPregunta, setUnanimidadPregunta] = useState<Pregunta | null>(null);
   const [unanimidadPaso, setUnanimidadPaso] = useState<1 | 2>(1);
   const [unanimidadEjecutando, setUnanimidadEjecutando] = useState(false);
+  // Cierre con pendientes
+  type CierrePendiente = { pregunta: Pregunta; pendientes: string[] };
+  const [cierrePendiente, setCierrePendiente] = useState<CierrePendiente | null>(null);
+  const [cerrandoForzado, setCerrandoForzado] = useState(false);
 
   function confirmar(data: ConfirmData) {
     setMsgError('');
@@ -72,51 +76,136 @@ export default function PreguntasScreen() {
     setCargando(false);
   }
 
-  async function liberar(pregunta: Pregunta) {
-    const { data: activas } = await supabase
-      .from('preguntas').select('id').eq('estado', 'activa');
+  async function proyectar(pregunta: Pregunta) {
+    // Verificar que no haya otra proyectada o abierta
+    const { data: ocupadas } = await supabase
+      .from('preguntas').select('id').in('estado', ['proyectada', 'abierta']);
 
-    if (activas && activas.length > 0) {
-      setMsgError('Ya existe una votación activa. Ciérrala primero antes de activar otra.');
+    if (ocupadas && ocupadas.length > 0) {
+      setMsgError('Ya hay una pregunta proyectada o abierta. Ciérrala primero.');
+      return;
+    }
+
+    confirmar({
+      titulo: 'Proyectar Pregunta',
+      mensaje: `¿Proyectar esta pregunta a los presidentes?\n\n"${pregunta.texto}"\n\nPodrán ver el texto pero NO votar aún.`,
+      btnTexto: 'Sí, Proyectar',
+      btnColor: '#1D4ED8',
+      onConfirmar: async () => {
+        const { error } = await supabase
+          .from('preguntas').update({ estado: 'proyectada' }).eq('id', pregunta.id);
+        if (error) { setMsgError(`No se pudo proyectar: ${error.message}`); return; }
+        await registrar('PROYECTAR', 'admin', 'Pregunta proyectada para revisión', {
+          pregunta_id: pregunta.id,
+          pregunta_texto: pregunta.texto.slice(0, 120),
+        });
+        cargar();
+      },
+    });
+  }
+
+  async function despoyectar(pregunta: Pregunta) {
+    confirmar({
+      titulo: 'Dejar de Proyectar',
+      mensaje: `¿Retirar esta pregunta de la proyección?\n\n"${pregunta.texto}"\n\nVolverá al estado pendiente.`,
+      btnTexto: 'Sí, Retirar',
+      btnColor: '#6B7280',
+      onConfirmar: async () => {
+        const { error } = await supabase
+          .from('preguntas').update({ estado: 'pendiente' }).eq('id', pregunta.id);
+        if (error) { setMsgError(`No se pudo retirar: ${error.message}`); return; }
+        cargar();
+      },
+    });
+  }
+
+  async function liberar(pregunta: Pregunta) {
+    const { data: abiertas } = await supabase
+      .from('preguntas').select('id').eq('estado', 'abierta');
+
+    if (abiertas && abiertas.length > 0) {
+      setMsgError('Ya existe una votación abierta. Ciérrala primero antes de activar otra.');
       return;
     }
 
     confirmar({
       titulo: 'Liberar Votación',
-      mensaje: `¿Activar esta votación?\n\n"${pregunta.texto}"\n\nLos presidentes podrán votar inmediatamente.`,
+      mensaje: `¿Abrir la votación ahora?\n\n"${pregunta.texto}"\n\nLos presidentes podrán votar inmediatamente.`,
       btnTexto: 'Sí, Liberar',
       btnColor: '#15803D',
       onConfirmar: async () => {
         const { error } = await supabase
-          .from('preguntas').update({ estado: 'activa' }).eq('id', pregunta.id);
+          .from('preguntas').update({ estado: 'abierta', fecha_apertura: new Date().toISOString() }).eq('id', pregunta.id);
         if (error) {
           setMsgError(`No se pudo liberar la votación: ${error.message}`);
           return;
         }
-        await registrar('LIBERAR', 'admin', pregunta.texto.slice(0, 80));
+        await registrar('LIBERAR', 'admin', 'Votación liberada — presidentes pueden votar', {
+          pregunta_id: pregunta.id,
+          pregunta_texto: pregunta.texto.slice(0, 120),
+        });
         cargar();
       },
     });
   }
 
   async function cerrar(pregunta: Pregunta) {
-    confirmar({
-      titulo: 'Cerrar Votación',
-      mensaje: `¿Cerrar esta votación?\n\n"${pregunta.texto}"\n\nLos presidentes que no hayan votado ya no podrán hacerlo.`,
-      btnTexto: 'Sí, Cerrar',
-      btnColor: '#374151',
-      onConfirmar: async () => {
-        const { error } = await supabase
-          .from('preguntas').update({ estado: 'cerrada' }).eq('id', pregunta.id);
-        if (error) {
-          setMsgError(`No se pudo cerrar la votación: ${error.message}`);
-          return;
-        }
-        await registrar('CERRAR', 'admin', pregunta.texto.slice(0, 80));
-        cargar();
-        mostrarResumen(pregunta);
-      },
+    if (pregunta.estado !== 'abierta') return;
+    // Verificar pendientes antes de mostrar modal
+    const [{ data: usuarios }, { data: votos }] = await Promise.all([
+      supabase.from('usuarios').select('id, nombre_usuario').eq('rol', 'presidente'),
+      supabase.from('votos').select('usuario_id').eq('pregunta_id', pregunta.id),
+    ]);
+    const votadosIds = new Set((votos ?? []).map((v: any) => v.usuario_id));
+    const pendientes = (usuarios ?? [])
+      .filter((u: any) => !votadosIds.has(u.id))
+      .map((u: any) => u.nombre_usuario as string);
+
+    if (pendientes.length > 0) {
+      // Hay pendientes: mostrar modal de advertencia específico
+      setCierrePendiente({ pregunta, pendientes });
+    } else {
+      // Todos votaron: confirmación simple
+      confirmar({
+        titulo: 'Cerrar Votación',
+        mensaje: `¿Cerrar esta votación?\n\n"${pregunta.texto}"\n\nTodas las asociaciones ya emitieron su voto.`,
+        btnTexto: 'Sí, Cerrar',
+        btnColor: '#374151',
+        onConfirmar: () => ejecutarCierre(pregunta, 0),
+      });
+    }
+  }
+
+  async function ejecutarCierre(pregunta: Pregunta, pendientesCount: number) {
+    const { error } = await supabase
+      .from('preguntas')
+      .update({ estado: 'cerrada', fecha_cierre: new Date().toISOString() })
+      .eq('id', pregunta.id);
+    if (error) {
+      setMsgError(`No se pudo cerrar la votación: ${error.message}`);
+      return;
+    }
+    const detalle = pendientesCount > 0
+      ? `Pregunta cerrada. ${pendientesCount} asociación(es) con voto pendiente`
+      : 'Pregunta cerrada. Todos los votos emitidos';
+    await registrar('CERRAR', 'admin', detalle, {
+      pregunta_id: pregunta.id,
+      pregunta_texto: pregunta.texto.slice(0, 120),
     });
+    cargar();
+    mostrarResumen(pregunta);
+  }
+
+  async function confirmarCierreForzado() {
+    if (!cierrePendiente) return;
+    const { pregunta, pendientes } = cierrePendiente;
+    setCierrePendiente(null);
+    setCerrandoForzado(true);
+    try {
+      await ejecutarCierre(pregunta, pendientes.length);
+    } finally {
+      setCerrandoForzado(false);
+    }
   }
 
   async function eliminar(pregunta: Pregunta) {
@@ -174,7 +263,7 @@ export default function PreguntasScreen() {
       // 3. Close question with unanimidad = true
       const { error: errPreg } = await supabase
         .from('preguntas')
-        .update({ estado: 'cerrada', unanimidad: true })
+        .update({ estado: 'cerrada', unanimidad: true, fecha_cierre: new Date().toISOString() })
         .eq('id', unanimidadPregunta.id);
 
       if (errPreg) {
@@ -183,8 +272,10 @@ export default function PreguntasScreen() {
       }
 
       // 4. Audit log
-      await registrar('UNANIMIDAD', 'admin',
-        `Aprobado por unanimidad — ${unanimidadPregunta.texto.slice(0, 80)}`);
+      await registrar('UNANIMIDAD', 'admin', 'Aprobado por unanimidad', {
+        pregunta_id: unanimidadPregunta.id,
+        pregunta_texto: unanimidadPregunta.texto.slice(0, 120),
+      });
 
       setUnanimidadPregunta(null);
       cargar();
@@ -274,9 +365,10 @@ export default function PreguntasScreen() {
   }
 
   function colorEstado(estado: string) {
-    if (estado === 'activa') return '#16A34A';
-    if (estado === 'cerrada') return '#374151';
-    return '#EA580C';
+    if (estado === 'abierta')    return '#16A34A';
+    if (estado === 'proyectada') return '#1D4ED8';
+    if (estado === 'cerrada')    return '#374151';
+    return '#EA580C'; // pendiente
   }
 
   function renderPregunta({ item }: { item: Pregunta }) {
@@ -300,21 +392,21 @@ export default function PreguntasScreen() {
         )}
 
         <View style={styles.acciones}>
-          {item.estado === 'borrador' && (
+          {item.estado === 'pendiente' && (
             <>
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#1D4ED8' }]}
+                onPress={() => proyectar(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnTexto}>📺 Proyectar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#374151' }]}
                 onPress={() => router.push(`/admin/editar?id=${item.id}`)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.btnTexto}>✏️ Editar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: '#15803D' }]}
-                onPress={() => liberar(item)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.btnTexto}>▶ Liberar</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#9F1239' }]}
@@ -325,7 +417,32 @@ export default function PreguntasScreen() {
               </TouchableOpacity>
             </>
           )}
-          {item.estado === 'activa' && (
+          {item.estado === 'proyectada' && (
+            <>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#15803D' }]}
+                onPress={() => liberar(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnTexto}>▶ Liberar Votación</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#1D4ED8' }]}
+                onPress={() => router.push(`/admin/editar?id=${item.id}`)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnTexto}>✏️ Editar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#6B7280' }]}
+                onPress={() => despoyectar(item)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.btnTexto}>⏹ Dejar de Proyectar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {item.estado === 'abierta' && (
             <>
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#374151' }]}
@@ -523,6 +640,56 @@ export default function PreguntasScreen() {
         </View>
       </Modal>
 
+      {/* Modal cierre con pendientes */}
+      <Modal visible={cierrePendiente !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { borderTopWidth: 5, borderTopColor: '#D97706' }]}>
+            <Text style={[styles.modalTitulo, { color: '#92400E' }]}>⚠️ Votos Pendientes</Text>
+            <Text style={styles.modalSubtitulo}>
+              {`Aún hay ${cierrePendiente?.pendientes.length} asociación(es) con voto pendiente:`}
+            </Text>
+
+            <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false}>
+              {(cierrePendiente?.pendientes ?? []).map((nombre, i) => (
+                <View key={i} style={styles.pendienteFila}>
+                  <Text style={styles.pendienteIcono}>⏳</Text>
+                  <Text style={styles.pendienteNombre}>{nombre}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.pendienteAviso}>
+              <Text style={styles.pendienteAvisoTxt}>
+                ¿Estás seguro de cerrar la votación de todas formas?{'\n'}
+                Los votos pendientes quedarán sin emitir y no podrán recuperarse.
+              </Text>
+            </View>
+
+            <View style={styles.modalBotones}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#374151' }, cerrandoForzado && { opacity: 0.6 }]}
+                onPress={confirmarCierreForzado}
+                disabled={cerrandoForzado}
+                activeOpacity={0.8}
+              >
+                {cerrandoForzado
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Text style={styles.modalBtnTexto}>Sí, cerrar de todas formas</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: C.tarjeta2, borderWidth: 1, borderColor: C.borde }]}
+                onPress={() => setCierrePendiente(null)}
+                disabled={cerrandoForzado}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalBtnTexto, { color: C.txtPrimario }]}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de resumen al cerrar */}
       <Modal visible={modalResumen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -628,6 +795,19 @@ const styles = StyleSheet.create({
   msgErrorTxt: { color: '#DC2626', fontSize: 14, fontWeight: '700', flex: 1, lineHeight: 20 },
   msgErrorCerrar: { color: '#DC2626', fontSize: 16, fontWeight: '900', paddingLeft: 8 },
 
+  pendienteFila: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#FDE68A',
+  },
+  pendienteIcono: { fontSize: 14 },
+  pendienteNombre: { fontSize: 14, color: '#374151', fontWeight: '600', flex: 1 },
+  pendienteAviso: {
+    backgroundColor: '#FEF3C7', borderRadius: 8, padding: 12,
+    borderWidth: 1, borderColor: '#F59E0B',
+  },
+  pendienteAvisoTxt: {
+    fontSize: 13, color: '#92400E', fontWeight: '600', lineHeight: 19, textAlign: 'center',
+  },
   vacio: { alignItems: 'center', paddingTop: 80 },
   vacioIcono: { fontSize: 48, marginBottom: 12 },
   vacioTexto: { color: C.txtPrimario, fontSize: 18, fontWeight: '700', marginBottom: 6 },

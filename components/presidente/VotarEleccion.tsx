@@ -116,14 +116,14 @@ const styles = StyleSheet.create({
 
   preguntaCard: {
     backgroundColor: C.tarjeta, borderRadius: SIZES.radiusMd,
-    padding: 20, marginBottom: 20, borderWidth: 2,
+    padding: 20, marginBottom: 24, borderWidth: 2,
   },
   tipoBadge: {
     paddingHorizontal: 12, paddingVertical: 5,
     borderRadius: 20, alignSelf: 'flex-start', marginBottom: 12,
   },
   tipoBadgeTxt: { color: C.blanco, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-  preguntaTxt: { fontSize: 26, fontWeight: '700', color: C.txtPrimario, lineHeight: 34 },
+  preguntaTxt: { fontSize: 20, fontWeight: '900', color: C.txtPrimario, lineHeight: 28 },
 
   contadorRow: {
     flexDirection: 'row', justifyContent: 'space-between',
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   candidatoItem: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: C.blanco, borderRadius: SIZES.radiusMd,
-    padding: 20, marginBottom: 10,
+    padding: 18, marginBottom: 12,
     borderWidth: 2, borderColor: C.borde,
     gap: 14, minHeight: SIZES.touchMin, ...SHADOWS.card,
   },
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   checkboxSel: { backgroundColor: C.rojo, borderColor: C.rojo },
   checkMark: { color: C.blanco, fontSize: 20, fontWeight: '900' },
   candidatoNombre: {
-    flex: 1, fontSize: SIZES.txtBody, fontWeight: '600', color: C.txtSecundario,
+    flex: 1, fontSize: 16, fontWeight: '600', color: C.txtSecundario,
   },
 
   btnConfirmar: {
