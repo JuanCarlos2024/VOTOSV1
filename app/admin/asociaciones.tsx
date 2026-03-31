@@ -37,7 +37,7 @@ export default function AsociacionesScreen() {
     setCargando(true);
     const { data } = await supabase
       .from('usuarios')
-      .select('*')
+      .select('id, nombre_usuario, id_usuario, votos_disponibles, rol, activo')
       .order('nombre_usuario');
     setLista((data ?? []) as Usuario[]);
     setCargando(false);
