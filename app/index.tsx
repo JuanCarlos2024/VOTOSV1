@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { supabase, Usuario } from '../lib/supabase';
@@ -21,10 +20,12 @@ export default function LoginScreen() {
   const [idUsuario, setIdUsuario] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [msgError, setMsgError] = useState('');
 
   async function handleLogin() {
+    setMsgError('');
     if (!idUsuario.trim() || !contrasena.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu ID y contraseña.');
+      setMsgError('Por favor ingresa tu ID y contraseña.');
       return;
     }
 
@@ -37,22 +38,19 @@ export default function LoginScreen() {
         .single();
 
       if (error || !data) {
-        Alert.alert('Error', 'Usuario no encontrado.');
+        setMsgError('Usuario no encontrado.');
         return;
       }
 
       const usuario = data as Usuario;
 
       if (usuario.contrasena !== contrasena) {
-        Alert.alert('Error', 'Contraseña incorrecta.');
+        setMsgError('Contraseña incorrecta.');
         return;
       }
 
       if (usuario.activo === false) {
-        Alert.alert(
-          'Cuenta desactivada',
-          'Tu cuenta ha sido desactivada.\nContacta al administrador.'
-        );
+        setMsgError('Tu cuenta está desactivada. Contacta al administrador.');
         return;
       }
 
@@ -67,10 +65,10 @@ export default function LoginScreen() {
       } else if (usuario.rol === 'presidente') {
         router.replace('/home');
       } else {
-        Alert.alert('Error', 'Rol no reconocido.');
+        setMsgError('Rol no reconocido. Contacta al administrador.');
       }
     } catch {
-      Alert.alert('Error', 'Ocurrió un problema. Intenta de nuevo.');
+      setMsgError('Ocurrió un problema. Intenta de nuevo.');
     } finally {
       setCargando(false);
     }
@@ -95,7 +93,7 @@ export default function LoginScreen() {
             placeholder="Ingresa tu ID"
             placeholderTextColor="#666"
             value={idUsuario}
-            onChangeText={setIdUsuario}
+            onChangeText={v => { setIdUsuario(v); setMsgError(''); }}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -106,10 +104,16 @@ export default function LoginScreen() {
             placeholder="Ingresa tu contraseña"
             placeholderTextColor="#666"
             value={contrasena}
-            onChangeText={setContrasena}
+            onChangeText={v => { setContrasena(v); setMsgError(''); }}
             secureTextEntry
             autoCapitalize="none"
           />
+
+          {msgError !== '' && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorTxt}>⚠️ {msgError}</Text>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.boton, cargando && styles.botonDesactivado]}
@@ -203,6 +207,22 @@ const styles = StyleSheet.create({
   },
   botonDesactivado: {
     opacity: 0.6,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  errorTxt: {
+    color: '#DC2626',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   botonTexto: {
     color: C.blanco,
