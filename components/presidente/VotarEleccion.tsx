@@ -21,6 +21,8 @@ export default function VotarEleccion({
 }: Props) {
   const max = pregunta.max_selecciones ?? 1;
   const limitAlcanzado = seleccionados.length >= max;
+  const exacto = seleccionados.length === max;
+  const puedeContinuar = exacto;
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -36,14 +38,17 @@ export default function VotarEleccion({
 
       {/* Contador */}
       <View style={styles.contadorRow}>
-        <Text style={styles.instruccion}>SELECCIONA HASTA {max} CANDIDATO(S)</Text>
+        <Text style={styles.instruccion}>SELECCIONA EXACTAMENTE {max} CANDIDATO(S)</Text>
         <Text style={[
           styles.contadorChip,
-          { color: limitAlcanzado ? '#16A34A' : C.rojo },
+          { color: exacto ? '#16A34A' : C.rojo },
         ]}>
           {seleccionados.length} / {max}
         </Text>
       </View>
+      <Text style={styles.contadorSub}>
+        Seleccionados: {seleccionados.length} de {max} requeridos
+      </Text>
 
       {/* Lista de candidatos */}
       {candidatos.map(c => {
@@ -80,20 +85,27 @@ export default function VotarEleccion({
         );
       })}
 
+      {/* Mensaje de error si intenta confirmar sin completar */}
+      {!puedeContinuar && seleccionados.length > 0 && (
+        <Text style={styles.errorMsg}>
+          Debes seleccionar exactamente {max} candidato{max !== 1 ? 's' : ''} para poder votar.
+        </Text>
+      )}
+
       {/* Botón confirmar */}
       <TouchableOpacity
         style={[
           styles.btnConfirmar,
           { backgroundColor: C.rojo },
-          seleccionados.length === 0 && { opacity: 0.3 },
+          !puedeContinuar && { opacity: 0.3 },
         ]}
         onPress={() => {
-          if (seleccionados.length > 0) {
+          if (puedeContinuar) {
             hapticImpact();
             onConfirmar();
           }
         }}
-        disabled={seleccionados.length === 0}
+        disabled={!puedeContinuar}
         activeOpacity={0.8}
       >
         <Text style={styles.btnConfirmarTxt}>CONFIRMAR SELECCIÓN</Text>
@@ -133,6 +145,13 @@ const styles = StyleSheet.create({
     color: C.azul, fontSize: SIZES.txtBadge, fontWeight: '800', letterSpacing: 2, flex: 1,
   },
   contadorChip: { fontSize: 22, fontWeight: '900' },
+  contadorSub: {
+    color: C.txtSecundario, fontSize: 13, marginBottom: 14, marginTop: -6,
+  },
+  errorMsg: {
+    color: C.rojo, fontSize: 14, fontWeight: '600',
+    textAlign: 'center', marginBottom: 10, marginTop: 4,
+  },
 
   candidatoItem: {
     flexDirection: 'row', alignItems: 'center',

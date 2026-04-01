@@ -57,7 +57,7 @@ export default function ProyeccionScreen() {
     cargar();
 
     const ch = supabase
-      .channel('proyeccion-votos')
+      .channel(`proyeccion-votos-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'votos' }, () => cargar())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'preguntas' }, () => cargar())
       .subscribe();
